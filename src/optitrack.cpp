@@ -237,11 +237,24 @@ namespace libmotioncapture {
     };
     std::map<int, rigidBodyDefinition> rigidBodyDefinitions;
   };
-
+  struct vec3{
+    float x, y, z;
+    vec3(){}
+    vec3(float x, float y, float z):x(x), y(y), z(z){}
+  };
+  
+  // inline float dis(vec3 v1, vec3 v2){
+  //   return sqrt((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y) + (v1.z - v2.z) * (v1.z - v2.z);
+  // }
+  std::vector<Eigen::Vector3f> cf_positions;
+  int cf_nums;
+  
   MotionCaptureOptitrack::MotionCaptureOptitrack(
-    const std::string& hostname)
+    const std::string& hostname, const std::vector<Eigen::Vector3f> &initial_positions)
   {
     pImpl = new MotionCaptureOptitrackImpl;
+    cf_nums = initial_positions.size();
+    cf_positions = initial_positions;
 
     // Connect to command port to query version
     boost::asio::io_service io_service_cmd;
@@ -297,7 +310,8 @@ namespace libmotioncapture {
 
     // connect to data port to receive mocap data
     auto listen_address = boost::asio::ip::address::from_string("0.0.0.0");
-    auto multicast_address = boost::asio::ip::address::from_string(MULTICAST_ADDRESS);
+    auto multicast_address = boost::asio::ip::address::from_string("230.0.0.1");
+    // auto multicast_address = boost::asio::ip::address::from_string(MULTICAST_ADDRESS);
 
     // Create the socket so that multiple may be bound to the same address.
     boost::asio::ip::udp::endpoint listen_endpoint(
@@ -348,25 +362,58 @@ namespace libmotioncapture {
       
         // Next 4 Bytes is the number of data sets (markersets, rigidbodies, etc)
         int nMarkerSets = 0; memcpy(&nMarkerSets, ptr, 4); ptr += 4;
-        // printf("Marker Set Count : %d\n", nMarkerSets);
+        printf("Marker Set Count : %d\n", nMarkerSets);
 
         // Loop through number of marker sets and get name and data
         for (int i=0; i < nMarkerSets; i++)
         {
+        printf("name: %s\n", ptr);
           ptr += strlen(ptr) + 1;
-          ptr += 12;
+          // float x,y,z;
+          // memcpy(&x, ptr, sizeof(float));
+          // memcpy(&y, ptr+4, sizeof(float));
+          // memcpy(&z, ptr+8, sizeof(float));
+          // printf("%.6f, %.6f, %.6f\n", x, y, z);
+          ptr += 16;
+          // ptr += 4 * 16;
         }
-
+        // printf("Got here\n");
         // Loop through unlabeled markers
         // OtherMarker list is Deprecated
         int nOtherMarkers = 0; memcpy(&nOtherMarkers, ptr, 4); ptr += 4;
-        // printf("Unidentified Marker Count : %d\n", nOtherMarkers);
-        ptr += nOtherMarkers * 12;
+        if(nOtherMarkers != cf_nums) return;
+        printf("Unidentified Marker Count : %d\n", nOtherMarkers);
+        for(int i=0; i < nOtherMarkers; i++){
+          float x, y, z, un;
+          memcpy(&x, ptr+4, sizeof(float));
+          memcpy(&y, ptr+8, sizeof(float));
+          memcpy(&z, ptr+12, sizeof(float));
+          x = -x; y = -y;
+          // memcpy(&un, ptr+12, sizeof(float));
+          // std::swap(x, y);
+          // x = -x;
+          printf("%f %f %f %f\n", x, y, z, un);
+          Eigen::Vector3f pt(x, y ,z);
+          float min_dis = std::numeric_limits<float>::max(); 
+          int min_id = -1;
+          for(int j = 0; j < cf_nums; j++){
+            float tmp_dis =(cf_positions[j] - pt).norm();
+            if(tmp_dis < min_dis){
+              min_dis = tmp_dis;
+              min_id = j;
+            }
+          }
+          cf_positions[min_id] = pt;
+          ptr += 26;
+        }
+        printf("\n");
+        // ptr += nOtherMarkers * 12;
 
         // Loop through rigidbodies
         int nRigidBodies = 0; memcpy(&nRigidBodies, ptr, 4); ptr += 4;
+        printf("Rigid Body Count : %d\n", nRigidBodies);
         pImpl->rigidBodies.resize(nRigidBodies);
-        // printf("Rigid Body Count : %d\n", nRigidBodies);
+        
         for (int j=0; j < nRigidBodies; j++)
         {
           // Rigid body position and orientation 
@@ -635,25 +682,41 @@ namespace libmotioncapture {
     std::vector<Object> & result) const
   {
     result.clear();
-    for (const auto& rb : pImpl->rigidBodies) {
-      if (rb.bTrackingValid) {
-        const auto& def = pImpl->rigidBodyDefinitions[rb.ID];
+    #if 0
+      for (const auto& rb : pImpl->rigidBodies) {
+        if (rb.bTrackingValid) {
+          const auto& def = pImpl->rigidBodyDefinitions[rb.ID];
 
-        Eigen::Vector3f position(
-          rb.x + def.xoffset,
-          rb.y + def.yoffset,
-          rb.z + def.zoffset);
+          Eigen::Vector3f position(
+            // rb.x + def.xoffset,
+            // rb.y + def.yoffset,
+            // rb.z + def.zoffset
+            -rb.y + def.xoffset,
+            rb.x + def.yoffset,
+            rb.z + def.zoffset
+            );
 
-        Eigen::Quaternionf rotation(
-          rb.qw, // w
-          rb.qx, // x
-          rb.qy, // y
-          rb.qz  // z
-          );
+          Eigen::Quaternionf rotation(
+            // rb.qw, // w
+            // rb.qx, // x
+            // rb.qy, // y
+            // rb.qz  // z
+            1,
+            0,
+            0,
+            0
+            );
 
-        result.push_back(Object(def.name, position, rotation));
+          result.push_back(Object(def.name, position, rotation));
+        }
       }
-    }
+    #else
+      for(int i=0; i<cf_nums; i++){
+        Eigen::Quaternionf rotation(1, 0, 0, 0);
+        result.push_back(Object("cf" + std::to_string(i+1), cf_positions[i], 
+            rotation));
+      }
+    #endif
   }
 
   void MotionCaptureOptitrack::getPointCloud(

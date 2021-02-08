@@ -7,7 +7,7 @@ namespace libmotioncapture {
   class MotionCaptureOptitrack : public MotionCapture{
   public:
     MotionCaptureOptitrack(
-      const std::string& hostname);
+      const std::string& hostname, const std::vector<Eigen::Vector3f> &initial_positions);
 
     virtual ~MotionCaptureOptitrack();
 

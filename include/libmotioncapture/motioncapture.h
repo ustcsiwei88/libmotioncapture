@@ -57,9 +57,9 @@ namespace libmotioncapture {
       return m_occluded;
     }
 
+    Eigen::Vector3f m_position;
   private:
     std::string m_name;
-    Eigen::Vector3f m_position;
     Eigen::Quaternionf m_rotation;
     bool m_occluded;
   };
