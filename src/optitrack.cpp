@@ -381,7 +381,7 @@ namespace libmotioncapture {
         // Loop through unlabeled markers
         // OtherMarker list is Deprecated
         int nOtherMarkers = 0; memcpy(&nOtherMarkers, ptr, 4); ptr += 4;
-        if(nOtherMarkers != cf_nums) return;
+        // if(nOtherMarkers != cf_nums) return;
         printf("Unidentified Marker Count : %d\n", nOtherMarkers);
         for(int i=0; i < nOtherMarkers; i++){
           float x, y, z, un;
